@@ -1,3 +1,5 @@
+<!-- livebook:{"app_settings":{"slug":"foo"}} -->
+
 # GenServers
 
 ## Section 1: Introduction to Processes and State in Elixir
@@ -29,11 +31,13 @@ defmodule Counter do
 end
 ```
 
+```elixir
+counter = Counter.start(0)
+```
+
 **Usage:**
 
 ```elixir
-counter = Counter.start(0)
-
 # Increment the counter
 send(counter, {:increment, self()})
 
@@ -232,8 +236,6 @@ send(store, :stop)
 
 ---
 
-These examples illustrate how basic processes in Elixir can hold and manage state using recursive functions. However, they also highlight limitations such as repetitive boilerplate code and lack of robust error handling, which pave the way for more advanced abstractions like GenServer.
-
 ## Section 2: Building Generic Implementations
 
 #### **2.1 Abstracting Common Patterns**
@@ -253,9 +255,14 @@ defmodule GenericServer1 do
   defp loop(callback_module, state) do
     receive do
       message ->
-        {new_state, reply} = callback_module.handle_message(message, state)
-        if reply != :noreply, do: send(self(), reply)
-        loop(callback_module, new_state)
+        case callback_module.handle_message(message, state) do
+          {:noreply, new_state} ->
+            loop(callback_module, new_state)
+
+          {:reply, caller, new_state} ->
+            send(caller, {:ok, new_state})
+            loop(callback_module, new_state)
+        end
     end
   end
 end
@@ -265,25 +272,26 @@ end
 
 ```elixir
 defmodule CounterServer do
-  def handle_message({:increment}, state) do
+  def handle_message(:increment, state) do
     new_state = state + 1
-    {new_state, :noreply}
+    {:noreply, new_state}
   end
 
   def handle_message({:get, caller}, state) do
-    send(caller, {:ok, state})
-    {state, :noreply}
+    {:reply, caller, state}
   end
 end
+```
+
+```elixir
+counter = GenericServer1.start(CounterServer, 0)
 ```
 
 **Usage:**
 
 ```elixir
-counter = GenericServer1.start(CounterServer, 0)
-
 # Increment the counter
-send(counter, {:increment})
+send(counter, :increment)
 
 # Get the current value
 send(counter, {:get, self()})
